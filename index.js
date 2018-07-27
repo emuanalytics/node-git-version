@@ -1,70 +1,42 @@
 #!/usr/bin/env node
 
-/**
- * This module creates version.js file in current directory
- * containing object with following information:
- * tag - Git tag attached to HEAD (if any)
- * hash - SHA-1 hash of HEAD
- * timestamp - current timestamp
- *
- * This information is presented as Node.js module and can be used
- * by Node.js app for getting version information
- *
- * Created: Maxim Stepanov
- * Date: March 2015
- */
+var fs = require('fs');
+var exec = require('child_process').exec;
+var path = require('path');
 
- var fs = require('fs');
- var exec = require('child_process').exec;
- var child = exec('git reflog --decorate -1', function (error, stdout, stderr) 
- {
- 	if (error)
- 	{
-		// Shit
-		console.log('[FAILED]: Failed to run Git command');
-		process.exit(1);
-	}
+var outpath = process.argv[2] || '';
 
-	// Example output: a32d6d8 (HEAD, tag: TAG-V.02, tag: TAG-V.01, master) HEAD@{0}: commit (initial): Asd
-	// Run regular expression to extract sha and tag
-	var sha = stdout.match(/[a-z0-9]+\s\(HEAD/g);
-	if (sha && sha.length > 0)
-	{
-		sha = sha[0].slice(0, -6);
-	}
+function command(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { cwd: __dirname },(err, stdout, stderr) => {
+      if (err) return reject(err);
+      resolve(stdout.split('\n').join(''));
+    });
+  });
+};
 
-	var tag = stdout.match(/tag\:\s[a-zA-Z0-9\-\.]+\,/g);
-	if (tag && tag.length > 0)
-	{
-		tag = tag[0].slice(5, -1);
-	}
+function writeFile(file, data, options) {
+  return new Promise((resolve, reject) => {
+    fs.writeFile(file, data, options, (e) => e ? reject(e) : resolve());
+  });
+};
 
-	// Compose version file info
-	var versionInfo = 'module.exports = {';
-	
-	if (tag)
-	{
-		versionInfo += '\n\ttag: \'' + tag + '\',';
-	}
-	else
-	{
-		versionInfo += '\n\ttag: null,';
-	}
+async function generateVersionInfo() {
+  const hash = await command('git rev-parse --short HEAD');
+  const tag = await command('git describe --always --tag --abbrev=0');
+  const versionInfo = `
+module.exports = {
+  tag: '${tag}',
+  hash: '${hash}',
+  timestamp: ${Math.floor(new Date().getTime()/1000)}
+};\n`;
 
-	versionInfo += '\n\thash: \'' + sha + '\',';
-	versionInfo += '\n\ttimestamp: ' + Math.floor(new Date().getTime()/1000);
-	versionInfo += '\n};\n';
+  await writeFile(path.resolve(outpath, 'version.js'), versionInfo);
+}
 
-	// Create version.js file
-	fs.writeFile('version.js', versionInfo, function(err) 
-	{
-		if(err) 
-		{
-			console.log('[FAILED]: can\'t create version.js file. Permission issue?');
-		}
-		else
-		{
-			console.log('[OK]');
-		}
-	});
+generateVersionInfo()
+.then(() => console.log('[OK]'))
+.catch((e) => {
+  console.error(`[Failed] = ${e.message}`);
+  process.exit(1);
 });
