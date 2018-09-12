@@ -25,6 +25,8 @@ async function generateVersionInfo() {
   const hash = await command('git rev-parse --short HEAD');
   const tag = await command('git describe --always --tag --abbrev=0');
   const versionInfo = `
+/* tslint:disable */
+
 module.exports = {
   tag: '${tag}',
   hash: '${hash}',
